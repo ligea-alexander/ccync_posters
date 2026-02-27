@@ -1,141 +1,845 @@
 
-let step = 0;
-let busy = false;
-
+const canvas = document.getElementById("birdCanvas");
+const ctx = canvas.getContext("2d");
+const scooperCanvas = document.getElementById("scooperCanvas");
+const scooperCtx = scooperCanvas.getContext("2d");
+scooperCanvas.style.display = 'none'; // Hide until triggered
 const stage = document.getElementById("stage");
-const bird = document.getElementById("bird");
-const caretaker = document.getElementById("caretaker");
+
+// Bird sprite configuration
+const BIRD_CONFIG = {
+  spriteWidth: 32,     // Width of each frame
+  spriteHeight: 32,    // Height of each frame
+  frames: 4,           // Number of frames in animation
+  frameDelay: 7.8,       // Number of game ticks between frame changes (controls wing flap speed)
+  flySpeed: 2          // Pixels per frame movement speed
+};
+
+let currentFrame = 0;
+let frameCounter = 0;
+let birdX = -20;  // Start off-screen left
+let birdY = -45;  // Near top for flying
+let flyDirection = 1;  // 1 for right, -1 for left
+
+// Load sprite sheet
+const spriteSheet = new Image();
+spriteSheet.src = "./assets/bird_flight.png";
+
+// Scooper configuration
+const SCOOPER_CONFIG = {
+  spriteWidth: 32,
+  spriteHeight: 32,
+  frames: 5,
+  frameDelay: 8,
+  walkSpeed: 3,
+  poopFrameIndex: 2
+};
+
+let scooperSpriteLoaded = false;
+const scooperSpriteSheet = new Image();
+scooperSpriteSheet.src = "./assets/scooper2.png";
+
+// Poop configuration
+const POOP_CONFIG = {
+  spriteWidth: 32,
+  spriteHeight: 32,
+  frames: 4,
+  frameDelay: 25,  // Slower frame transitions
+  fallSpeed: 0.8,  // Slower fall speed
+  // Padding to crop tighter around the poop graphic
+  paddingLeft: 130,
+  paddingRight: 100,  // Reduced right padding for frames 1-3
+  paddingTop: 420,
+  paddingBottom: 420,
+  // Frame 0 needs more aggressive cropping
+  frame0PaddingLeft: 100,
+  frame0PaddingRight: 100,
+  frame0PaddingTop: 450,
+  frame0PaddingBottom: 450
+};
+
+const poopSpriteSheet = new Image();
+poopSpriteSheet.src = "./assets/poop-falling.png";
+
+let poopSpriteLoaded = false;
+let poopsDropped = 0;
+const MAX_POOPS = 4;
+const poops = [];
+const poopContainer = document.getElementById("poopContainer");
+let isPoopAnimating = false;
+let flowersGrown = 0; // Track how many flowers have sprouted
+
+const heartIcons = Array.from(document.querySelectorAll('.heart-icon'));
+const poopIcons = Array.from(document.querySelectorAll('.poop-icon'));
+
+function initHud() {
+  heartIcons.forEach((icon) => icon.classList.remove('icon-hidden'));
+  poopIcons.forEach((icon) => icon.classList.add('icon-hidden'));
+}
+
+function updateHud() {
+  const remainingHearts = Math.max(0, MAX_POOPS - poopsDropped);
+  heartIcons.forEach((icon, index) => {
+    icon.classList.toggle('icon-hidden', index >= remainingHearts);
+  });
+  poopIcons.forEach((icon, index) => {
+    icon.classList.toggle('icon-hidden', index >= poopsDropped);
+  });
+}
+
+// Define three zones relative to pipe/tunnel position
 const tunnel = document.getElementById("tunnel");
 
-gsap.to(bird, { x: 320, duration: 3.2, ease: "sine.inOut", yoyo: true, repeat: -1 });
-gsap.to(bird, { y: 10, duration: 0.8, ease: "sine.inOut", yoyo: true, repeat: -1 });
+function getTunnelBounds() {
+  const tunnelRect = tunnel.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
 
-function drop() {
-  if (busy) return;
-  if (step >= 3) return; // already complete; wait for reset
-  busy = true;
-
-  const poop = document.createElement("div");
-  poop.className = "poop";
-  stage.appendChild(poop);
-
-  // Position poop under bird (account for transforms)
-  const b = bird.getBoundingClientRect();
-  const s = stage.getBoundingClientRect();
-  const startX = (b.left - s.left) + b.width * 0.6;
-  const startY = (b.top - s.top) + b.height * 0.9;
-  poop.style.left = `${startX}px`;
-  poop.style.top = `${startY}px`;
-
-  // Target: tunnel center
-  const t = tunnel.getBoundingClientRect();
-  const targetX = (t.left - s.left) + t.width * 0.5;
-  const targetY = (t.top - s.top) + t.height * 0.35;
-
-  gsap.to(poop, {
-    x: targetX - startX,
-    y: targetY - startY,
-    duration: 0.45,
-    ease: "power1.in",
-    onComplete: () => cleanAndGrow(poop)
-  });
-}
-
-
-function setCaretakerSprite(frames = 4) {
-  const img = new Image();
-  img.src = "./assets/caretaker.png"; // <-- direct
-  img.onload = () => {
-    const frameW = img.naturalWidth / frames;
-    const frameH = img.naturalHeight;
-
-    caretaker.style.width = `${frameW}px`;
-    caretaker.style.height = `${frameH}px`;
-    caretaker.style.backgroundImage = `url(${img.src})`;
-    caretaker.style.backgroundSize = `${img.naturalWidth}px ${img.naturalHeight}px`;
-
-    caretaker.dataset.sheetW = img.naturalWidth;
-    caretaker.dataset.frames = frames;
+  const bounds = {
+    left: tunnelRect.left - stageRect.left,
+    right: tunnelRect.right - stageRect.left,
+    top: tunnelRect.top - stageRect.top,
+    bottom: tunnelRect.bottom - stageRect.top,
+    width: tunnelRect.width,
+    height: tunnelRect.height
   };
-  img.onerror = () => console.error("Could not load caretaker sprite:", img.src);
+
+  console.log('Tunnel bounds:', bounds);
+  return bounds;
 }
 
-setCaretakerSprite(4);
+function getRandomPoopZone() {
+  const stageWidth = stage.offsetWidth;
+  const tunnelBounds = getTunnelBounds();
 
+  // Define safe zones that avoid the tunnel
+  const zones = [
+    { min: 0.05, max: Math.min(0.3, (tunnelBounds.left - 40) / stageWidth) },      // Far left
+    { min: Math.max(0.7, (tunnelBounds.right + 40) / stageWidth), max: 0.95 }      // Far right
+  ];
 
-function playCaretakerOnce() {
-  const frames = Number(caretaker.dataset.frames) || 4;
-  const sheetW = Number(caretaker.dataset.sheetW) || 0;
-  if (!sheetW) return null;
+  // Filter out zones that don't have valid ranges
+  const validZones = zones.filter(zone => zone.max > zone.min);
 
-  const frameW = sheetW / frames;
-  let last = -1;
+  if (validZones.length === 0) {
+    // Fallback: use safer boundaries
+    return stageWidth * (0.05 + Math.random() * 0.9);
+  }
 
-  // animate a dummy tween and snap backgroundPosition to exact integers
-  return gsap.to({}, {
-    duration: 0.32,
-    ease: "none",
-    onUpdate() {
-      const idx = Math.min(frames - 1, Math.floor(this.progress() * frames));
-      if (idx !== last) {
-        last = idx;
-        gsap.set(caretaker, { backgroundPosition: `-${Math.round(idx * frameW)}px 0px` });
-      }
-    }
-  });
+  const zone = validZones[Math.floor(Math.random() * validZones.length)];
+  return stageWidth * (zone.min + Math.random() * (zone.max - zone.min));
 }
 
-function cleanAndGrow(poopEl) {
-  gsap.set(caretaker, { opacity: 1, backgroundPosition: "0px 0px" });
+function drawBirdFrame() {
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const sheetW = Number(caretaker.dataset.sheetW) || 0;
-
-  const tl = gsap.timeline({
-    onComplete: () => {
-      poopEl.remove();
-      step += 1;
-      revealStep(step);
-      busy = false;
-      if (step === 3) finishAndReset();
-    }
-  });
-
-  // fallback if sprite hasn't loaded yet
-  if (!sheetW) {
-    tl.to(caretaker, { x: 8, duration: 0.12, yoyo: true, repeat: 3, ease: "steps(1)" }, 0)
-      .to(poopEl, { scale: 0, duration: 0.12, ease: "back.in(2)" }, 0.25)
-      .to(caretaker, { opacity: 0, duration: 0.12 }, 0.44);
+  // Check if sprite is loaded
+  if (!spriteSheet.complete) {
+    console.warn('Sprite sheet not loaded yet!');
     return;
   }
 
-  tl.add(playCaretakerOnce(), 0) // <-- plays sprite frames once
-    .to(poopEl, { scale: 0, duration: 0.12, ease: "back.in(2)" }, 0.22)
-    .set(caretaker, { backgroundPosition: "0px 0px" }, 0.36)
-    .to(caretaker, { opacity: 0, duration: 0.12 }, 0.44);
+  // Padding for flight sprite
+  const paddingLeft = 30;
+  const paddingRight = -30;
+  const paddingTop = 20;
+  const paddingBottom = 20;
+
+  const sx = (currentFrame * BIRD_CONFIG.spriteWidth) + paddingLeft;
+  const sy = paddingTop;
+  const sourceWidth = BIRD_CONFIG.spriteWidth - paddingLeft - paddingRight;
+  const sourceHeight = BIRD_CONFIG.spriteHeight - paddingTop - paddingBottom;
+
+  ctx.drawImage(
+    spriteSheet,                    // source image
+    sx, sy,                         // source x, y (which frame to extract)
+    sourceWidth,                    // source width (with padding removed)
+    sourceHeight,                   // source height (with padding removed)
+    0, 0,                           // destination x, y on canvas
+    canvas.width,                   // destination width
+    canvas.height                   // destination height
+  );
 }
 
+function animateBird() {
+  // Update frame counter for animation
+  frameCounter++;
+  if (frameCounter >= BIRD_CONFIG.frameDelay) {
+    frameCounter = 0;
+    currentFrame = (currentFrame + 1) % BIRD_CONFIG.frames;
+  }
 
-function revealStep(n) {
-  const flower = stage.querySelector(`.flower[data-step="${n}"]`);
-  const line = stage.querySelector(`.line[data-step="${n}"]`);
+  // Draw current frame
+  drawBirdFrame();
 
-  gsap.to(flower, { opacity: 1, scale: 1, duration: 0.22, ease: "back.out(2)", from: { scale: 0.2 } });
-  gsap.to(line, { opacity: 1, y: -4, duration: 0.22, ease: "power1.out" });
+  // Move bird horizontally based on direction
+  birdX += BIRD_CONFIG.flySpeed * flyDirection;
+  canvas.style.left = `${birdX}px`;
+  canvas.style.top = `${birdY}px`;
+
+  // Flip the canvas horizontally based on direction
+  if (flyDirection === -1) {
+    canvas.style.transform = 'scaleX(-1)';  // Flip for flying left
+  } else {
+    canvas.style.transform = 'scaleX(1)';   // Normal for flying right
+  }
+
+  // Check if bird has reached the right edge
+  if (birdX > stage.offsetWidth + 10) {
+    flyDirection = -1;  // Switch to flying left
+  }
+
+  // Check if bird has reached the left edge
+  if (birdX < -10) {
+    flyDirection = 1;  // Switch to flying right
+  }
+
+  requestAnimationFrame(animateBird);
 }
 
-function finishAndReset() {
-  const tl = gsap.timeline();
+// Draw initial frame when sprite loads and start animation
+spriteSheet.onload = function () {
+  console.log(`✓ Bird sprite loaded successfully!`);
+  console.log('Sprite sheet dimensions:', spriteSheet.width, 'x', spriteSheet.height);
+  console.log('Natural dimensions:', spriteSheet.naturalWidth, 'x', spriteSheet.naturalHeight);
 
-  tl.to(stage, { scale: 1.01, duration: 0.12, yoyo: true, repeat: 1, ease: "power1.inOut" })
-    .to({}, { duration: 1.2 }) // hold
-    .to(stage.querySelectorAll(".line, .flower"), { opacity: 0, duration: 0.35, stagger: 0.03 })
-    .add(() => { step = 0; }, "+=0");
+  // Calculate actual frame dimensions from the loaded sprite
+  BIRD_CONFIG.spriteWidth = spriteSheet.naturalWidth / BIRD_CONFIG.frames;
+  BIRD_CONFIG.spriteHeight = spriteSheet.naturalHeight;
+  console.log('Each frame is:', BIRD_CONFIG.spriteWidth, 'x', BIRD_CONFIG.spriteHeight);
+
+  // Update canvas size to display the bird at a reasonable size
+  const displayScale = 0.20;  // Scale down to 20% of original size
+  // Make canvas much wider to accommodate full bird with beak during movement
+  canvas.width = (BIRD_CONFIG.spriteWidth * displayScale) * 1.8;  // 80% wider for full bird
+  canvas.height = BIRD_CONFIG.spriteHeight * displayScale * 1.4;
+  console.log('Canvas resized to:', canvas.width, 'x', canvas.height);
+
+  // Position and start animation
+  canvas.style.left = `${birdX}px`;
+  canvas.style.top = `${birdY}px`;
+  drawBirdFrame();
+  animateBird();
+};
+
+spriteSheet.onerror = function () {
+  console.error('✗ Failed to load bird sprite from: assets/bird_flight.png');
+  console.error('Check if the file exists at that path');
+};
+
+console.log('Canvas element:', canvas);
+console.log('Canvas context:', ctx);
+console.log('Attempting to load sprite from:', spriteSheet.src);
+
+initHud();
+
+// Poop dropping functionality
+function dropPoop() {
+  console.log('🔥 dropPoop called!');
+
+  if (poopsDropped >= MAX_POOPS) {
+    console.log('Maximum poops reached!');
+    return;
+  }
+
+  // Drop poop FROM the bird's current position - ALWAYS from bird, never relocated
+  const poopX = birdX + (canvas.width * 0.35); // Back end of bird
+  const poopY = birdY + (canvas.height * 0.65); // Bottom of bird
+  const groundLevel = stage.offsetHeight * 0.75;
+
+  // Check if poop would land within screen bounds
+  const stageWidth = stage.offsetWidth;
+  if (poopX < 0 || poopX > stageWidth) {
+    console.log(`❌ Poop would land off-screen at X: ${poopX.toFixed(0)} (stage width: ${stageWidth}) - drop rejected!`);
+    return;
+  }
+
+  // Check if landing position would be too close to tunnel
+  const tunnelBounds = getTunnelBounds();
+  const TUNNEL_MARGIN = 50;
+
+  console.log(`Attempting drop at X: ${poopX.toFixed(0)}`);
+  console.log(`Tunnel safe zone: ${(tunnelBounds.left - TUNNEL_MARGIN).toFixed(0)} to ${(tunnelBounds.right + TUNNEL_MARGIN).toFixed(0)}`);
+
+  // Check collision: does poop center land in tunnel margin zone?
+  const collides = poopX > (tunnelBounds.left - TUNNEL_MARGIN) &&
+    poopX < (tunnelBounds.right + TUNNEL_MARGIN);
+
+  if (collides) {
+    console.log('❌ Collision detected - drop rejected');
+    return;
+  }
+
+  console.log('✅ Safe zone - drop allowed');
+
+  const poop = {
+    x: poopX,
+    y: poopY,
+    targetY: groundLevel,
+    frame: 0,
+    frameCounter: 0,
+    canvas: document.createElement('canvas'),
+    ctx: null,
+    isLanded: false,
+    landedCounter: 0,
+    isScooped: false
+  };
+
+  // Scale to 60% for better visibility
+  const displayScale = 0.60;
+  poop.canvas.width = POOP_CONFIG.spriteWidth * displayScale;
+  poop.canvas.height = POOP_CONFIG.spriteHeight * displayScale;
+  poop.canvas.className = 'poop';
+  poop.canvas.style.left = `${poop.x}px`;
+  poop.canvas.style.top = `${poop.y}px`;
+  poop.ctx = poop.canvas.getContext('2d');
+
+  poopContainer.appendChild(poop.canvas);
+  poops.push(poop);
+  poopsDropped++;
+
+  updateHud();
+
+  updateHud();
+
+  console.log(`Poop dropped FROM bird at X: ${poop.x.toFixed(2)}! (${poopsDropped}/${MAX_POOPS})`);
+
+  // Animate poop from bird to ground using GSAP
+  gsap.to(poop, {
+    y: poop.targetY,
+    duration: 0.45,
+    ease: "power1.in",
+    onUpdate: () => {
+      poop.canvas.style.top = `${poop.y}px`;
+    },
+    onComplete: () => {
+      poop.isLanded = true;
+    }
+  });
+
+  // Start animation loop if not already running
+  if (!isPoopAnimating) {
+    isPoopAnimating = true;
+    animatePoops();
+  }
 }
 
-document.addEventListener("keydown", (e) => {
-  if (e.code === "Space") { e.preventDefault(); drop(); }
+function animatePoops() {
+  if (poops.length === 0) {
+    requestAnimationFrame(animatePoops);
+    return;
+  }
+
+  poops.forEach((poop, index) => {
+    // Check if poop should be scooped (landed for a moment)
+    if (poop.isLanded && !poop.isScooped) {
+      poop.landedCounter++;
+      if (poop.landedCounter > 60) { // Wait ~1 second before scooping
+        poop.isScooped = true;
+        // triggerScooper(poop, index); // DISABLED FOR TESTING
+        triggerFlower(poop); // Test flower directly, pass poop for position
+      }
+    }
+
+    // Only animate sprite frames when poop has landed and not scooped
+    if (poop.isLanded && !poop.isScooped) {
+      // On ground: cycle through frames 1, 2, 3 (frames 2-4 in sprite sheet)
+      poop.frameCounter++;
+
+      // Fast transition to frame 1 (landing)
+      if (poop.frame < 1) {
+        if (poop.frameCounter >= 7) {
+          poop.frame = 1;
+          poop.frameCounter = 0;
+        }
+      } else {
+        // Slow cycle through frames 1, 2, 3
+        if (poop.frameCounter >= 18) {
+          poop.frame = 1 + ((poop.frame - 1 + 1) % 3); // Cycles 1 -> 2 -> 3 -> 1
+          poop.frameCounter = 0;
+        }
+      }
+    } else if (!poop.isScooped) {
+      // While falling: stay on frame 0
+      poop.frame = 0;
+    }
+
+    // Don't draw if scooped
+    if (poop.isScooped) {
+      return;
+    }
+
+    // Draw poop frame
+    poop.ctx.clearRect(0, 0, poop.canvas.width, poop.canvas.height);
+
+    if (poopSpriteLoaded && poopSpriteSheet.complete && !poopSpriteSheet.error) {
+      // Use frame 0 specific padding if we're on the first frame
+      const isFrame0 = poop.frame === 0;
+      const padLeft = isFrame0 ? POOP_CONFIG.frame0PaddingLeft : POOP_CONFIG.paddingLeft;
+      const padRight = isFrame0 ? POOP_CONFIG.frame0PaddingRight : POOP_CONFIG.paddingRight;
+      const padTop = isFrame0 ? POOP_CONFIG.frame0PaddingTop : POOP_CONFIG.paddingTop;
+      const padBottom = isFrame0 ? POOP_CONFIG.frame0PaddingBottom : POOP_CONFIG.paddingBottom;
+
+      const sx = (poop.frame * POOP_CONFIG.spriteWidth) + padLeft;
+      const sy = padTop;
+      const sourceWidth = POOP_CONFIG.spriteWidth - padLeft - padRight;
+      const sourceHeight = POOP_CONFIG.spriteHeight - padTop - padBottom;
+
+      try {
+        poop.ctx.drawImage(
+          poopSpriteSheet,
+          sx, sy,
+          sourceWidth,
+          sourceHeight,
+          0, 0,
+          poop.canvas.width,
+          poop.canvas.height
+        );
+      } catch (e) {
+        console.error('Error drawing poop sprite:', e);
+        // Draw yellow fallback
+        poop.ctx.fillStyle = 'yellow';
+        poop.ctx.fillRect(0, 0, poop.canvas.width, poop.canvas.height);
+      }
+    } else {
+      // Draw yellow fallback
+      poop.ctx.fillStyle = 'yellow';
+      poop.ctx.fillRect(0, 0, poop.canvas.width, poop.canvas.height);
+    }
+  });
+
+  requestAnimationFrame(animatePoops);
+}
+
+// Start poop animation loop when sprite loads
+poopSpriteSheet.onload = function () {
+  console.log('✓ Poop sprite loaded successfully!');
+  console.log('Poop sprite dimensions:', poopSpriteSheet.naturalWidth, 'x', poopSpriteSheet.naturalHeight);
+
+  // Calculate actual frame dimensions from the loaded sprite (frames in a row)
+  POOP_CONFIG.spriteWidth = poopSpriteSheet.naturalWidth / POOP_CONFIG.frames;
+  POOP_CONFIG.spriteHeight = poopSpriteSheet.naturalHeight;
+  poopSpriteLoaded = true;
+  console.log('Each poop frame is:', POOP_CONFIG.spriteWidth, 'x', POOP_CONFIG.spriteHeight);
+};
+
+poopSpriteSheet.onerror = function () {
+  console.error('✗ Failed to load poop sprite from: ./assets/poop-falling.png');
+  console.error('The sprite will show as yellow boxes instead');
+  poopSpriteLoaded = false;
+};
+
+// Scooper sprite loading
+scooperSpriteSheet.onload = function () {
+  console.log('✓ Scooper sprite loaded successfully!');
+  console.log('Scooper sprite dimensions:', scooperSpriteSheet.naturalWidth, 'x', scooperSpriteSheet.naturalHeight);
+
+  SCOOPER_CONFIG.spriteWidth = scooperSpriteSheet.naturalWidth / SCOOPER_CONFIG.frames;
+  SCOOPER_CONFIG.spriteHeight = scooperSpriteSheet.naturalHeight;
+  scooperSpriteLoaded = true;
+  console.log('Each scooper frame is:', SCOOPER_CONFIG.spriteWidth, 'x', SCOOPER_CONFIG.spriteHeight);
+
+  const displayScale = 0.20;
+  scooperCanvas.width = (SCOOPER_CONFIG.spriteWidth * displayScale) * 1.8;
+  scooperCanvas.height = SCOOPER_CONFIG.spriteHeight * displayScale * 1.4;
+};
+
+scooperSpriteSheet.onerror = function () {
+  console.error('✗ Failed to load scooper sprite from: ./assets/scooper2.png');
+  scooperSpriteLoaded = false;
+};
+
+function triggerScooper(poop, poopIndex) {
+  if (!scooperSpriteLoaded) return;
+
+  console.log('🧹 Scooper triggered for poop at index', poopIndex);
+
+  let scooperFrame = 0;
+  let scooperFrameCounter = 0;
+  let scooperX = -80; // Start off-screen left
+  let scooperPhase = 'walk-in'; // walk-in -> approach -> scoop -> walk-to-tunnel
+  const poopX = poop.x;
+
+  // Show scooper when triggered
+  scooperCanvas.style.display = 'block';
+
+  let scoopPositionX = 0; // Track where scooper picked up the poop
+  let dumpPhaseCounter = 0; // Track time in dump phase
+
+  function drawScooperFrame() {
+    scooperCtx.clearRect(0, 0, scooperCanvas.width, scooperCanvas.height);
+    if (!scooperSpriteSheet.complete) return;
+
+    const displayScale = 0.20;
+    const padLeft = 11;
+    const padRight = -5;
+    const padTop = 0;
+    const padBottom = 0;
+
+    const sx = (scooperFrame * SCOOPER_CONFIG.spriteWidth) + padLeft;
+    const sy = padTop;
+    const sourceWidth = SCOOPER_CONFIG.spriteWidth - padLeft - padRight;
+    const sourceHeight = SCOOPER_CONFIG.spriteHeight - padTop - padBottom;
+
+    scooperCtx.drawImage(
+      scooperSpriteSheet,
+      sx, sy,
+      sourceWidth,
+      sourceHeight,
+      0, 0,
+      scooperCanvas.width,
+      scooperCanvas.height
+    );
+  }
+
+  function animateScooper() {
+    scooperFrameCounter++;
+    const tunnelBounds = getTunnelBounds();
+    const stageRect = stage.getBoundingClientRect();
+    const tunnelLeftX = tunnelBounds.left - stageRect.left;
+
+    // Calculate scooper's shovel position (accounting for where shovel is in sprite)
+    // The shovel is roughly at 65% across the canvas width
+    const scooperShovelX = scooperX + (scooperCanvas.width * 0.85);
+
+    if (scooperPhase === 'walk-in') {
+      // Walk in with frame cycling for animation effect (frames 0-1)
+      const walkFrameDelay = 12;
+      if (scooperFrameCounter >= walkFrameDelay) {
+        scooperFrameCounter = 0;
+        scooperFrame = (scooperFrame + 1) % 2; // Cycle 0-1
+      }
+
+      scooperX += SCOOPER_CONFIG.walkSpeed;
+      scooperCanvas.style.left = `${scooperX}px`;
+
+      // Check if scooper shovel is approaching poop (within 30px before)
+      if (scooperShovelX >= poopX - 30) {
+        scooperPhase = 'approach';
+        scooperFrame = 1;
+        scooperFrameCounter = 0;
+      }
+    } else if (scooperPhase === 'approach') {
+      // Approach with frame 1 (preparing to scoop)
+      scooperFrame = 1;
+      scooperX += SCOOPER_CONFIG.walkSpeed;
+      scooperCanvas.style.left = `${scooperX}px`;
+
+      // Check if scooper shovel has reached the poop position
+      if (scooperShovelX >= poopX - 5) {
+        // Start scoop animation - frames 1->2->3
+        scooperPhase = 'scoop';
+        scooperFrame = 1;
+        scooperFrameCounter = 0;
+      }
+    } else if (scooperPhase === 'scoop') {
+      // Play scooping animation through frames 1->2->3 with longer delay
+      const scoopFrameDelay = 20; // Slower frame cycle during scoop
+      if (scooperFrameCounter >= scoopFrameDelay) {
+        scooperFrameCounter = 0;
+        scooperFrame++;
+
+        // Frame 2 is where poop is captured
+        if (scooperFrame === SCOOPER_CONFIG.poopFrameIndex) {
+          // Poop is now in shovel - hide the poop canvas
+          poop.canvas.style.display = 'none';
+        }
+
+        if (scooperFrame > 2) {
+          // Scooping animation complete, move to tunnel with poop
+          scooperPhase = 'walk-to-tunnel';
+          scooperFrame = 2; // Hold frame 2 (poop secured in shovel)
+          scooperFrameCounter = 0;
+          scoopPositionX = scooperX; // Remember where poop was scooped
+        }
+      }
+    } else if (scooperPhase === 'walk-to-tunnel') {
+      // Walk to tunnel while holding frame 3 (poop in shovel)
+      scooperX += SCOOPER_CONFIG.walkSpeed;
+      scooperCanvas.style.left = `${scooperX}px`;
+
+      // Hold frame 2 while walking (poop in shovel)
+      scooperFrame = 2;
+
+      // Calculate distance to tunnel center
+      const distanceToTunnel = tunnelLeftX - scooperX;
+
+      // Check if close enough to tunnel (within 50px) - start dumping animation
+      if (distanceToTunnel <= 50) {
+        // Start dumping animation
+        scooperPhase = 'dump';
+        scooperFrame = 2;
+        scooperFrameCounter = 0;
+        dumpPhaseCounter = 0; // Reset dump phase counter
+      }
+
+    } else if (scooperPhase === 'dump') {
+      // Hybrid dump: hold frame 2 for minimum time AND until close to tunnel
+      dumpPhaseCounter++;
+      const distanceToTunnel = tunnelLeftX - scooperX;
+      const minHoldFrames = 35; // Hold frame 2 for at least 45 frames
+      const dumpStartDistance = -60; // AND must be 20px past tunnel entrance
+      const dumpFrameDelay = 13; // Faster cycling for dump animation
+
+      // Only dump if BOTH conditions met: enough time passed AND close to tunnel
+      if (dumpPhaseCounter <= minHoldFrames || distanceToTunnel > dumpStartDistance) {
+        // Still holding - either not enough time OR not close enough to tunnel
+        scooperFrame = 2;
+        scooperFrameCounter = 0;
+      } else {
+        // Both conditions met - start dump animation (cycle frames 3->4)
+        if (scooperFrameCounter >= dumpFrameDelay) {
+          scooperFrameCounter = 0;
+          if (scooperFrame < 3) {
+            scooperFrame = 3;
+          } else if (scooperFrame === 3) {
+            scooperFrame = 4;
+          } else {
+            scooperFrame = 3; // Loop back to 3
+          }
+        }
+
+        // After cycling for a bit, exit
+        if (scooperFrame >= 3 && dumpPhaseCounter > minHoldFrames + 60) {
+          scooperPhase = 'exit';
+          scooperFrame = 4;
+          scooperFrameCounter = 0;
+          triggerFlower(); // Sprout flower from tunnel!
+        }
+      }
+
+      scooperX += SCOOPER_CONFIG.walkSpeed;
+      scooperCanvas.style.left = `${scooperX}px`;
+
+    } else if (scooperPhase === 'exit') {
+      // Continue walking off screen
+      scooperFrame = 4;
+      scooperX += SCOOPER_CONFIG.walkSpeed;
+      scooperCanvas.style.left = `${scooperX}px`;
+
+      if (scooperX > stage.offsetWidth + 80) {
+        // Scooper is off-screen, done
+        scooperCanvas.style.left = '-80px';
+        scooperCanvas.style.display = 'none'; // Hide when finished
+        scooperFrame = 0;
+        return;
+      }
+    }
+
+    drawScooperFrame();
+    requestAnimationFrame(animateScooper);
+  }
+
+  drawScooperFrame();
+  animateScooper();
+}
+
+// ========================================
+// FLOWER SPROUTING SYSTEM
+// ========================================
+
+function drawFlowerText(ctx, canvas, flowerNumber, flowerElement) {
+  const textList = [
+    'CC NYC',
+    'MAR 3',
+    '6-8pm',
+    'Pier 57'
+  ];
+
+  const text = textList[flowerNumber - 1] || '';
+  if (!text) return;
+
+  // Create a text element overlay (no sparkles in text)
+  const textDiv = document.createElement('div');
+  textDiv.style.position = 'absolute';
+  textDiv.style.left = flowerElement.style.left;
+  textDiv.style.top = (parseFloat(flowerElement.style.top) + 60) + 'px';
+  textDiv.style.fontFamily = '"Press Start 2P", monospace';
+  textDiv.style.fontSize = '10px';
+  textDiv.style.fontWeight = 'bold';
+  textDiv.style.color = '#000';
+  textDiv.style.textAlign = 'center';
+  textDiv.style.width = flowerElement.width + 'px';
+  textDiv.style.zIndex = '16';
+  textDiv.style.pointerEvents = 'none';
+  textDiv.textContent = text;
+
+  stage.appendChild(textDiv);
+
+  // Add sparkles to scene when 4th flower is complete
+  if (flowerNumber === 4) {
+    addSparklesAroundScene();
+  }
+}
+
+function addSparklesAroundScene() {
+  // Add sparkle emojis in a more aesthetic arc pattern
+  const sparkles = ['✨', '✨', '✨', '✨', '✨', '✨'];
+  const positions = [
+    { left: '35%', top: '45%' },   // left side
+    { left: '30%', top: '35%' },   // upper left arc
+    { left: '48%', top: '30%' },   // top center
+    { left: '66%', top: '35%' },   // upper right arc
+    { left: '66%', top: '45%' },   // right side
+    // { left: '48%', top: '68%' },    // bottom center
+    // { left: '48%', top: '68%' }
+  ];
+
+  sparkles.forEach((sparkle, index) => {
+    const sparkleEl = document.createElement('div');
+    sparkleEl.textContent = sparkle;
+    sparkleEl.style.position = 'absolute';
+    sparkleEl.style.left = positions[index].left;
+    sparkleEl.style.top = positions[index].top;
+    sparkleEl.style.fontSize = '20px';
+    sparkleEl.style.zIndex = '14';
+    sparkleEl.style.pointerEvents = 'none';
+    // Stagger animation delays
+    sparkleEl.style.animation = `sparkle-pulse 1.8s ease-in-out ${index * 0.2}s infinite`;
+
+    stage.appendChild(sparkleEl);
+  });
+} const FLOWER_CONFIG = {
+  spriteWidth: 1536 / 6,  // 6 frames in a row = 256px per frame
+  spriteHeight: 1024,
+  frames: 6,
+  frameDelay: 8,
+  displayScale: 0.20,
+  padLeft: 35,   // Crop left edge - adjust this value
+  padRight: 30   // Crop right edge - adjust this value
+};
+
+const flowerSpriteSheet = new Image();
+flowerSpriteSheet.src = "./assets/single-flower-bloom.png";
+
+const flowers = []; // Store all flower instances
+
+function triggerFlower(poop) {
+  console.log('🌸 TRIGGERING FLOWER! flowersGrown:', flowersGrown);
+  if (flowersGrown >= MAX_POOPS) return; // Max 3 flowers
+
+  flowersGrown++;
+  console.log('Creating flower #', flowersGrown, 'at poop position');
+
+  // Hide the poop when flower starts growing
+  poop.canvas.style.display = 'none';
+
+  // Create flower canvas
+  const flowerCanvas = document.createElement('canvas');
+  flowerCanvas.width = FLOWER_CONFIG.spriteWidth * FLOWER_CONFIG.displayScale;
+  flowerCanvas.height = FLOWER_CONFIG.spriteHeight * FLOWER_CONFIG.displayScale;
+  flowerCanvas.style.position = 'absolute';
+
+  // Position flower at poop location (where poop landed)
+  const poopX = poop.x;
+  const poopY = poop.targetY;
+
+  flowerCanvas.style.left = `${poopX - (flowerCanvas.width / 2)}px`;
+  flowerCanvas.style.top = `${poopY - (flowerCanvas.height * 0.50)}px`; // Lower position, closer to ground
+  flowerCanvas.style.zIndex = '15';
+  // flowerCanvas.style.border = '2px solid red'; // Debug: make canvas visible
+
+  console.log('Flower position:', {
+    left: flowerCanvas.style.left,
+    top: flowerCanvas.style.top,
+    width: flowerCanvas.width,
+    height: flowerCanvas.height,
+    poopX: poopX,
+    poopY: poopY
+  });
+
+  stage.appendChild(flowerCanvas);
+  console.log('Flower canvas appended to stage');
+
+  const flowerCtx = flowerCanvas.getContext('2d');
+
+  const flower = {
+    canvas: flowerCanvas,
+    ctx: flowerCtx,
+    frame: 0,
+    frameCounter: 0,
+    isComplete: false,
+    tweenProgress: 0  // For smooth transitions between frames
+  };
+
+  flowers.push(flower);
+
+  // Animate the flower growth
+  function animateFlower() {
+    if (flower.isComplete) return;
+
+    // Draw current frame first
+    flower.ctx.clearRect(0, 0, flower.canvas.width, flower.canvas.height);
+    if (!flowerSpriteSheet.complete) {
+      console.log('Flower sprite not loaded yet...');
+      requestAnimationFrame(animateFlower);
+      return;
+    }
+
+    if (flower.frame === 0) {
+      console.log('Drawing first flower frame');
+    }
+
+    const sx = (flower.frame * FLOWER_CONFIG.spriteWidth) + FLOWER_CONFIG.padLeft;
+    const sy = 0;
+    const sourceWidth = FLOWER_CONFIG.spriteWidth - FLOWER_CONFIG.padLeft - FLOWER_CONFIG.padRight;
+    const sourceHeight = FLOWER_CONFIG.spriteHeight;
+
+    flower.ctx.drawImage(
+      flowerSpriteSheet,
+      sx, sy,
+      sourceWidth,
+      sourceHeight,
+      0, 0,
+      flower.canvas.width,
+      flower.canvas.height
+    );
+
+    // Then update frame counter
+    flower.frameCounter++;
+
+    // Delay longer on frames 3-4 (blooming frames)
+    const delayForThisFrame = (flower.frame >= 3 && flower.frame <= 4) ? FLOWER_CONFIG.frameDelay * 2 : FLOWER_CONFIG.frameDelay;
+
+    if (flower.frameCounter >= delayForThisFrame) {
+      flower.frameCounter = 0;
+      flower.frame++;
+
+      if (flower.frame >= FLOWER_CONFIG.frames) {
+        flower.frame = FLOWER_CONFIG.frames - 1; // Hold on last frame
+        flower.isComplete = true;
+
+        // Add text to flower when complete
+        drawFlowerText(flowerCtx, flowerCanvas, flowersGrown, flowerCanvas);
+        return;
+      }
+    }
+
+    requestAnimationFrame(animateFlower);
+  }
+
+  animateFlower();
+}
+
+// ========================================
+// KEYBOARD & TOUCH CONTROLS
+// ========================================
+document.addEventListener('keydown', (e) => {
+  console.log('Keydown detected:', e.code);
+  if (e.code === 'Space') {
+    console.log('SPACEBAR PRESSED!');
+    e.preventDefault();
+    dropPoop();
+  }
 });
 
+// Touch/click controls for mobile
+stage.addEventListener('click', () => {
+  dropPoop();
+});
 
-// mobile-friendly: tap anywhere on the stage
-stage.addEventListener("pointerdown", drop);
+// Touch event for mobile devices
+stage.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  dropPoop();
+});
