@@ -1,4 +1,4 @@
-# Documenting My Approach / Method (with Vibe Coding)
+# Documenting My Approach / Method (with a smidgeeee of Vibe Coding)
 
 ## Conception
 
