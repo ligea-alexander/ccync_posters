@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+  <script src="main.js" defer></script>
+  <title>Document</title>
+</head>
+
+<body>
+  <main class="wrap">
+    <section class="device">
+      <!-- optional: frame as image; or do it in CSS background -->
+      <div class="screen" id="screen">
+        <div class="hud">
+          <div class="hud-left">HUNGER ♥♥♥</div>
+          <div class="hud-right">18:00</div>
+        </div>
+
+        <div class="stage" id="stage">
+          <div class="sky"></div>
+          <div class="clouds"></div>
+
+          <div class="grass"></div>
+          <div class="tunnel" id="tunnel"></div>
+
+          <div class="message">
+            <div class="line line-1" data-step="1">CC NYC</div>
+            <div class="line line-2" data-step="2">FEB 27</div>
+            <div class="line line-3" data-step="3">6–8PM · PIER 57</div>
+          </div>
+
+          <div class="flowers">
+            <div class="flower f1" data-step="1"></div>
+            <div class="flower f2" data-step="2"></div>
+            <div class="flower f3" data-step="3"></div>
+          </div>
+
+          <div class="caretaker" id="caretaker"></div>
+          <div class="bird" id="bird"></div>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <div class="btn"></div>
+        <div class="btn"></div>
+        <div class="btn"></div>
+      </div>
+    </section>
+
+    <p class="hint">Press Space (or tap) to drop.</p>
+  </main>
+
+</body>
+
+
+</html>

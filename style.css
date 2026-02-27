@@ -1,0 +1,194 @@
+body {
+  margin: 0;
+  background: #0b0b10;
+  color: #fff;
+  font-family: system-ui;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.wrap {
+  width: min(520px, 92vw);
+}
+
+.device {
+  background: #cfd3db;
+  border-radius: 36px;
+  padding: 18px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .45);
+}
+
+.screen {
+  border-radius: 22px;
+  background: #111;
+  padding: 10px;
+}
+
+.hud {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: .85;
+  padding: 4px 6px 10px;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  /* tamagotchi-ish square screen */
+  overflow: hidden;
+  border-radius: 16px;
+  background: #bfe6ff;
+}
+
+.caretaker {
+  position: absolute;
+  bottom: 18%;
+  left: 18%;
+  width: 48px;
+  height: 48px;
+
+  background-image: url("./assets/caretaker.png");
+  background-repeat: no-repeat;
+  background-position: 0px 0px;
+
+  image-rendering: pixelated;
+  opacity: 0;
+  z-index: 20;
+  /* ensure it's above grass/sky */
+}
+
+.caretaker {
+  transform: scale(0.5);
+  transform-origin: bottom left;
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#bfe6ff, #dff6ff);
+}
+
+.grass {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22%;
+  background: #2aa34a;
+}
+
+.tunnel {
+  position: absolute;
+  bottom: 18%;
+  left: 52%;
+  width: 80px;
+  height: 50px;
+  transform: translateX(-50%);
+  background: #444;
+  border-radius: 10px;
+}
+
+.bird {
+  position: absolute;
+  top: 28%;
+  left: 12%;
+  width: 64px;
+  height: 48px;
+  background: #ffd400;
+  border-radius: 10px;
+}
+
+/* .caretaker {
+  position: absolute;
+  bottom: 18%;
+  left: 18%;
+  width: 56px;
+  height: 56px;
+  background: #4aa3ff;
+  border-radius: 10px;
+  image-rendering: pixelated;
+  opacity: 0;
+} */
+
+.poop {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #6a3b1e;
+  border-radius: 6px;
+}
+
+.message .line {
+  position: absolute;
+  left: 10%;
+  opacity: 0;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.line-1 {
+  bottom: 38%;
+  font-size: 28px;
+}
+
+.line-2 {
+  bottom: 28%;
+  font-size: 22px;
+}
+
+.line-3 {
+  bottom: 18%;
+  font-size: 18px;
+}
+
+.flower {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  opacity: 0;
+  background: #ff4d7d;
+}
+
+.f1 {
+  bottom: 35%;
+  left: 12%;
+}
+
+.f2 {
+  bottom: 25%;
+  left: 12%;
+  background: #ffb400;
+}
+
+.f3 {
+  bottom: 15%;
+  left: 12%;
+  background: #ffffff;
+}
+
+.buttons {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  padding: 14px 0 0;
+}
+
+.btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #7f8793;
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, .25);
+}
+
+.hint {
+  margin: 10px 0 0;
+  opacity: .75;
+  text-align: center;
+  font-size: 13px;
+}
