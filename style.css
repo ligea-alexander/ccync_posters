@@ -349,12 +349,12 @@ body {
   }
 
   .device-wrap {
-    width: min(420px, 96vw);
+    width: min(450px, 98vw);
   }
 
   .device-frame {
     width: 160%;
-    margin-left: -8%;
+    margin-left: 2%;
   }
 
   .screen {
