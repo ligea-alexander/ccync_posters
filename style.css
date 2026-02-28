@@ -1,10 +1,20 @@
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   background: #404148;
   font-family: system-ui;
   display: grid;
   place-items: center;
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  overflow-x: hidden;
 }
 
 :root {
@@ -19,6 +29,10 @@ body {
   justify-content: center;
   align-items: center;
   gap: 20px;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .hint {
@@ -300,8 +314,13 @@ body {
     --hint-top: 55%;
   }
 
+  body {
+    overflow-x: hidden;
+  }
+
   .device-wrap {
     width: min(500px, 95vw);
+    overflow: hidden;
   }
 
   .hint {
@@ -321,7 +340,8 @@ body {
   }
 
   body {
-    padding: 12px;
+    padding: 0;
+    overflow-x: hidden;
   }
 
   .wrap {
