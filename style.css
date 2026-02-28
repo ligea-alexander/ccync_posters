@@ -7,7 +7,13 @@ body {
   min-height: 100vh;
 }
 
+:root {
+  /* Baseline tuned for 13" MacBook Pro */
+  --hint-top: 58%;
+}
+
 .wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -17,14 +23,15 @@ body {
 
 .hint {
   position: absolute;
-  top: 89%;
-  left: 49.5%;
-  transform: translate(-50%, -50%);
+  left: 50%;
+  top: var(--hint-top);
+  transform: translate(-50%, -110%);
   font-family: system-ui;
   color: #6c6c6c;
   font-size: 14px;
   text-align: center;
   margin: 0;
+  margin-top: 6px;
   padding: 8px 16px;
   background: rgba(254, 254, 254, 0.09);
   border-radius: 8px;
@@ -227,7 +234,7 @@ body {
 }
 
 .tree img {
-  height: 220px;
+  height: clamp(140px, 34vw, 220px);
   width: auto;
   image-rendering: pixelated;
 }
@@ -283,4 +290,120 @@ body {
   z-index: 3;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+/* =========================
+   RESPONSIVE BREAKPOINTS
+   ========================= */
+@media (max-width: 900px) {
+  :root {
+    --hint-top: 55%;
+  }
+
+  .device-wrap {
+    width: min(500px, 95vw);
+  }
+
+  .hint {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .hud {
+    font-size: 11px;
+    top: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --hint-top: 57%;
+  }
+
+  body {
+    padding: 12px;
+  }
+
+  .wrap {
+    gap: 12px;
+  }
+
+  .device-wrap {
+    width: min(420px, 96vw);
+  }
+
+  .device-frame {
+    width: 160%;
+    margin-left: -8%;
+  }
+
+  .screen {
+    left: 10.5%;
+    top: 22.5%;
+    width: 74%;
+    height: 30%;
+  }
+
+  .hud {
+    font-size: 10px;
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .icon-box {
+    min-width: 12px;
+    min-height: 9px;
+  }
+
+  .clouds img:nth-child(1) {
+    width: 24px;
+    height: 24px;
+  }
+
+  .clouds img:nth-child(2) {
+    width: 22px;
+    height: 22px;
+  }
+
+  .clouds img:nth-child(3) {
+    width: 28px;
+    height: 28px;
+  }
+
+  .hint {
+    position: absolute;
+    left: 50%;
+    top: var(--hint-top);
+    transform: translate(-50%, -110%);
+    margin-top: 2px;
+    white-space: nowrap;
+    text-align: center;
+  }
+}
+
+@media (max-height: 640px) {
+  :root {
+    --hint-top: 56%;
+  }
+
+  .wrap {
+    gap: 8px;
+  }
+
+  .device-wrap {
+    width: min(430px, 88vw);
+  }
+
+  .hint {
+    position: absolute;
+    left: 50%;
+    top: var(--hint-top);
+    transform: translate(-50%, -110%);
+    margin-top: 2px;
+    font-size: 12px;
+    padding: 4px 10px;
+  }
 }
